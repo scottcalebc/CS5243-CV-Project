@@ -9,15 +9,89 @@
 path: ../datasets/EikelboomSavanna  # dataset root dir
 train: train/images  # train images (relative to 'path')  
 val: val/images  # val images (relative to 'path')  
-test: /test/images  # test images (optional)  
+test: test/images  # test images (optional)  
 
 # Classes
 names:
-  0: Zebra
-  1: Elephant
-  2: Giraffe
+  0: zebra
+  1: elephant
+  2: giraffe
 
 
 
-downloads: |
-
+download: |
+  import os
+  import subprocess
+  import pybboxes as pbx
+  import cv2
+  from pathlib import Path
+  import shutil
+  
+  from ultralytics.utils.downloads import safe_download, unzip_file
+  
+  def eikelboom2yolo(path, labels=None):
+    annotations_file = "annotations_images.csv"
+    
+    label_ids = [] if labels is none else labels
+    with open(os.path.join(path, annotations_file), "r") as f:
+        for annotation in f:
+            # csv format:
+            #   IMG_FILE, X1, Y1, X2, Y2, Category
+            img_file, x1, y1, x2, y2, cat = annotation.split(",")
+    
+            if img_file == "FILE":
+                continue
+    
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    
+            if cat.lower() not in label_ids:
+                label_ids.append(cat.lower())
+    
+            # YOLO annotation expects a index for the labels, build label index on the fly by first appearance of category
+            label_id = label_ids.index(cat.lower())
+    
+    
+            # find file that matches annotation file
+            paths = [line[2:] for line in subprocess.check_output(f"find {path} -iname '{img_file}'", shell=True).splitlines()]
+    
+            if len(paths) == 0:
+                print("Error: Could not find image")
+                continue
+    
+            orig_img = paths[0].decode()
+    
+            H, W, _ = cv2.imread(orig_img).shape
+    
+            img_type = orig_img.split("/")[0]
+    
+            new_annotation_file_name = img_file.split(".")[0] + ".txt"
+    
+            xc, yc, w, h = pbx.convert_bbox([x1, y1, x2, y2], from_type="voc", to_type="yolo", image_size=(W,H))
+    
+            #print(f"Generating new annotaions file: {img_type}/labels/{new_annotation_file_name}")
+    
+    
+            with open(f"{img_type}/labels/{new_annotation_file_name}", "a") as af:
+                af.write(f"{label_id} {xc} {yc} {w} {h}\n")
+  
+  # Download
+  top_dataset_dir = os.path.dirname(yaml["path"])
+  dataset_dir = yaml["path"]
+  urls = [
+          'https://data.4tu.nl/ndownloader/items/9b1a2fcb-930e-4cc5-b9f0-a381dd1c7206/versions/1'
+          ]
+  
+  safe_download(urls[0], file="EikelboomSavana-data.zip", dir=top_dataset_dir, unzip=True, delete=True, curl=True, progress=False)
+  
+  if os.path.exists(os.path.join(top_dataset_dir, "EikelboomSavana-data/data.zip")):
+      data_unzip_dir = unzip_file(os.path.join(top_dataset_dir, "EikelboomSavana-data/data.zip"))
+  
+      # unzip data into correct/expected directory
+      if data_unzip_dir != dataset_dir:
+          shutil.copytree(data_unzip_dir, dataset_dir)
+          shutil.rmtree(data_unzip_dir)
+          shutil.rmtree(os.path.join(top_dataset_dir, "EikelboomSavana-data"))
+  
+  
+  # convert
+  eikelboom2yolo(dataset_dir)
