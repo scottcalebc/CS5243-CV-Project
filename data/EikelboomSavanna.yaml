@@ -32,7 +32,7 @@ download: |
   def eikelboom2yolo(path, labels=None):
     annotations_file = "annotations_images.csv"
     
-    label_ids = [] if labels is none else labels
+    label_ids = [] if labels is None else labels
     with open(os.path.join(path, annotations_file), "r") as f:
         for annotation in f:
             # csv format:
