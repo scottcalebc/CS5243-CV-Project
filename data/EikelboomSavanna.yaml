@@ -82,7 +82,7 @@ download: |
             orig_img = paths[0].decode()
    
             if img_dims_cache.get(orig_img, None) is None:
-              img_dims_cache[orig_img] = cv2.imgread(orig_img).shape
+              img_dims_cache[orig_img] = cv2.imread(orig_img).shape
 
             H, W, _ = img_dims_cache[orig_img]   
             img_type = os.path.dirname(orig_img)
