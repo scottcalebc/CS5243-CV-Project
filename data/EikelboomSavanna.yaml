@@ -21,18 +21,39 @@ names:
 
 download: |
   import os
+  import cv2
+  import glob
+  import shutil
   import subprocess
   import pybboxes as pbx
-  import cv2
   from pathlib import Path
-  import shutil
   
   from ultralytics.utils.downloads import safe_download, unzip_file
-  
+
+  def eikelboomSetup(path):
+    # move all images in each subdir ("val", "train", "test") into "type"/images , also make labels dir
+    dirs = ["val", "train", "test"]
+    
+    for sub_dir in dirs:
+      # setup images dir
+      dst = os.path.join(path, f"{sub_dir}/images") 
+      if not os.path.exists(dst):
+        os.mkdir(dst)
+
+      # Get glob of all images to move
+      imgs = glob.glob(os.path.join(path, f"{sub_dir}/*.JPG"))
+      for img in imgs:
+        # setup dst path and move
+        dst_path = os.path.join(path, f"{sub_dir}/images/{os.path.basename(img)}")
+        shutil.move(img, dst_path)
+ 
+    
   def eikelboom2yolo(path, labels=None):
+    # early out for debug
     annotations_file = "annotations_images.csv"
     
     label_ids = [] if labels is None else labels
+    img_dims_cache = {}
     with open(os.path.join(path, annotations_file), "r") as f:
         for annotation in f:
             # csv format:
@@ -52,26 +73,30 @@ download: |
     
     
             # find file that matches annotation file
-            paths = [line[2:] for line in subprocess.check_output(f"find {path} -iname '{img_file}'", shell=True).splitlines()]
+            paths = [line for line in subprocess.check_output(f"find {path} -iname '{img_file}'", shell=True).splitlines()]
     
             if len(paths) == 0:
                 print("Error: Could not find image")
                 continue
     
             orig_img = paths[0].decode()
-    
-            H, W, _ = cv2.imread(orig_img).shape
-    
-            img_type = orig_img.split("/")[0]
+   
+            if img_dims_cache.get(orig_img, None) is None:
+              img_dims_cache[orig_img] = cv2.imgread(orig_img).shape
+
+            H, W, _ = img_dims_cache[orig_img]   
+            img_type = os.path.dirname(orig_img)
     
             new_annotation_file_name = img_file.split(".")[0] + ".txt"
     
             xc, yc, w, h = pbx.convert_bbox([x1, y1, x2, y2], from_type="voc", to_type="yolo", image_size=(W,H))
     
-            #print(f"Generating new annotaions file: {img_type}/labels/{new_annotation_file_name}")
+   
+            if not os.path.exists(os.path.join(path, f"{img_type}/labels")):
+              print(f"Making dir: {path}/{img_type}/labels")
+              os.mkdir(os.path.join(path, f"{img_type}/labels"))
     
-    
-            with open(f"{img_type}/labels/{new_annotation_file_name}", "a") as af:
+            with open(os.path.join(path, f"{img_type}/labels/{new_annotation_file_name}"), "a") as af:
                 af.write(f"{label_id} {xc} {yc} {w} {h}\n")
   
   # Download
@@ -80,18 +105,23 @@ download: |
   urls = [
           'https://data.4tu.nl/ndownloader/items/9b1a2fcb-930e-4cc5-b9f0-a381dd1c7206/versions/1'
           ]
-  
-  safe_download(urls[0], file="EikelboomSavana-data.zip", dir=top_dataset_dir, unzip=True, delete=True, curl=True, progress=False)
-  
-  if os.path.exists(os.path.join(top_dataset_dir, "EikelboomSavana-data/data.zip")):
-      data_unzip_dir = unzip_file(os.path.join(top_dataset_dir, "EikelboomSavana-data/data.zip"))
-  
-      # unzip data into correct/expected directory
-      if data_unzip_dir != dataset_dir:
-          shutil.copytree(data_unzip_dir, dataset_dir)
-          shutil.rmtree(data_unzip_dir)
-          shutil.rmtree(os.path.join(top_dataset_dir, "EikelboomSavana-data"))
+ 
+  # mostly for debug since download and setup/conversion can fail independently
+  if not os.path.exists(dataset_dir):
+    safe_download(urls[0], file="EikelboomSavana-data.zip", dir=top_dataset_dir, unzip=True, delete=True, curl=True, progress=False)
+    
+    if os.path.exists(os.path.join(top_dataset_dir, "EikelboomSavana-data/data.zip")):
+        data_unzip_dir = unzip_file(os.path.join(top_dataset_dir, "EikelboomSavana-data/data.zip"))
+    
+        # unzip data into correct/expected directory
+        if data_unzip_dir != dataset_dir:
+            shutil.copytree(data_unzip_dir, dataset_dir)
+            shutil.rmtree(data_unzip_dir)
+            shutil.rmtree(os.path.join(top_dataset_dir, "EikelboomSavana-data"))
   
   
   # convert
   eikelboom2yolo(dataset_dir)
+
+  # setup dir / move files into correct locations
+  eikelboomSetup(dataset_dir)
