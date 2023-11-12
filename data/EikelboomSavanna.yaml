@@ -25,6 +25,7 @@ download: |
   import glob
   import shutil
   import subprocess
+  from tqdm import tqdm
   import pybboxes as pbx
   from pathlib import Path
   
@@ -41,8 +42,8 @@ download: |
         os.mkdir(dst)
 
       # Get glob of all images to move
-      imgs = glob.glob(os.path.join(path, f"{sub_dir}/*.JPG"))
-      for img in imgs:
+      imgs_pbar = tqdm(glob.glob(os.path.join(path, f"{sub_dir}/*.JPG")), desc=f"Moving images in {sub_dir}")
+      for img in imgs_pbar:
         # setup dst path and move
         dst_path = os.path.join(path, f"{sub_dir}/images/{os.path.basename(img)}")
         shutil.move(img, dst_path)
@@ -55,7 +56,8 @@ download: |
     label_ids = [] if labels is None else labels
     img_dims_cache = {}
     with open(os.path.join(path, annotations_file), "r") as f:
-        for annotation in f:
+        annotation_pbar = tqdm(f.readlines(), desc=f"Converting labels in {path}")
+        for annotation in annotation_pbar:
             # csv format:
             #   IMG_FILE, X1, Y1, X2, Y2, Category
             img_file, x1, y1, x2, y2, cat = annotation.split(",")
@@ -93,7 +95,6 @@ download: |
     
    
             if not os.path.exists(os.path.join(path, f"{img_type}/labels")):
-              print(f"Making dir: {path}/{img_type}/labels")
               os.mkdir(os.path.join(path, f"{img_type}/labels"))
     
             with open(os.path.join(path, f"{img_type}/labels/{new_annotation_file_name}"), "a") as af:
